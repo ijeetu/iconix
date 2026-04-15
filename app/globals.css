@@ -754,6 +754,7 @@ button {
 
 .button,
 .button-ghost {
+  position: relative;
   border-radius: 0;
   padding: 12px 24px;
   border: 1px solid var(--line-strong);
@@ -762,7 +763,24 @@ button {
   font-weight: 400;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  transition: background 0.18s ease, border-color 0.18s ease, opacity 0.18s ease;
+  transition:
+    background 0.14s ease,
+    border-color 0.14s ease,
+    color 0.14s ease,
+    box-shadow 0.14s ease,
+    transform 0.1s ease;
+  overflow: hidden;
+}
+
+/* Ripple layer */
+.button::after,
+.button-ghost::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: currentColor;
+  opacity: 0;
+  transition: opacity 0.14s ease;
 }
 
 .button {
@@ -784,15 +802,48 @@ button {
   padding: 0;
 }
 
-.button:hover,
+.button:hover {
+  opacity: 0.88;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.button:hover::after {
+  opacity: 0.06;
+}
+
+.button:active {
+  transform: scale(0.97);
+  opacity: 1;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.18);
+}
+
 .button-ghost:hover {
-  opacity: 0.7;
+  background: var(--surface-strong);
+  border-color: var(--line-strong);
+  color: var(--text);
+}
+
+.button-ghost:hover::after {
+  opacity: 0.04;
+}
+
+.button-ghost:active {
+  transform: scale(0.97);
+  background: var(--surface-strong);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.button:focus-visible,
+.button-ghost:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5);
 }
 
 .button:disabled,
 .button-ghost:disabled {
   cursor: not-allowed;
-  opacity: 0.55;
+  opacity: 0.4;
+  transform: none;
 }
 
 .empty {
@@ -979,8 +1030,18 @@ button {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+/* Action sheet buttons get a taller hit area */
+.action-sheet-actions .button,
+.action-sheet-actions .button-ghost {
+  padding: 14px 16px;
+  justify-content: center;
+  text-align: center;
+}
+
 .action-sheet-close {
   align-self: start;
+  padding: 8px 14px;
+  font-size: 0.78rem;
 }
 
 @media (max-width: 1080px) {
