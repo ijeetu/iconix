@@ -694,15 +694,19 @@ button {
 .icon-card {
   display: grid;
   gap: 6px;
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
   border-radius: var(--radius-lg);
-  background: var(--surface);
+  background: transparent;
   padding: 8px;
   text-align: left;
-  transition: border-color 0.18s ease, background 0.18s ease;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
-.icon-card:hover,
+.icon-card:hover {
+  border-color: var(--line);
+  background: var(--surface);
+}
+
 .icon-card.active {
   border-color: var(--line-strong);
   background: var(--surface-strong);
