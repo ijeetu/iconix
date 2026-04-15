@@ -31,13 +31,26 @@ export async function GET(
       });
     }
 
+    const colorParam = url.searchParams.get("color");
+    const strokeWidthParam = url.searchParams.get("strokeWidth");
+    const color = colorParam && /^#[0-9a-f]{6}$/i.test(colorParam) ? colorParam : null;
+    const strokeWidth = strokeWidthParam ? parseFloat(strokeWidthParam) : null;
+
     const svgFile = path.join(process.cwd(), icon.filePath);
     const originalSvg = await readFile(svgFile, "utf8");
-    const svg = buildDownloadableSvg(originalSvg);
+    let svg = buildDownloadableSvg(originalSvg);
+
+    if (color) {
+      svg = svg.replaceAll("currentColor", color);
+    }
+    if (strokeWidth !== null && !isNaN(strokeWidth) && strokeWidth > 0) {
+      svg = svg.replace(/stroke-width="[^"]*"/g, `stroke-width="${strokeWidth}"`);
+    }
 
     return new Response(svg, {
       headers: {
         "content-type": "image/svg+xml; charset=utf-8",
+        "cache-control": shouldDownload ? "no-store" : "public, max-age=3600, stale-while-revalidate=86400",
         ...(shouldDownload
           ? {
               "content-disposition": `attachment; filename="${icon.slug}.svg"`,

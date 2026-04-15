@@ -5,6 +5,9 @@ const projectRoot = process.cwd();
 const iconsRoot = path.join(projectRoot, "icons");
 const generatedRoot = path.join(projectRoot, "generated");
 const componentsRoot = path.join(generatedRoot, "components");
+const CATEGORY_ALIASES = {
+  Essentional: "Essential",
+};
 
 const SVG_TAG_PATTERN = /<svg\b([^>]*)>([\s\S]*?)<\/svg>/i;
 const VIEW_BOX_PATTERN = /viewBox="([^"]+)"/i;
@@ -79,7 +82,7 @@ function parseIndex(filename) {
 
 function buildLabel(category, style, index) {
   const suffix = index === 0 ? "" : ` ${index}`;
-  return `${titleCase(category)} ${titleCase(style)}${suffix}`;
+  return `${titleCase(CATEGORY_ALIASES[category] ?? category)} ${titleCase(style)}${suffix}`;
 }
 
 function buildComponentSource(componentName, viewBox, body, ids) {
@@ -202,7 +205,7 @@ for (const svgFile of svgFiles.sort((left, right) => left.localeCompare(right)))
 
   const entry = {
     slug,
-    category,
+    category: CATEGORY_ALIASES[category] ?? category,
     style,
     index,
     label,

@@ -1,7 +1,10 @@
 node_modules
 .next
+.next-dev
 out
 dist
+.DS_Store
+tsconfig.tsbuildinfo
 
 generated/icon-manifest.json
 generated/components

@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "clean": "rm -rf .next",
+    "clean": "rm -rf .next .next-dev",
     "generate:icons": "node scripts/generate-icon-data.mjs",
-    "dev": "npm run clean && npm run generate:icons && next dev",
-    "build": "npm run clean && npm run generate:icons && next build",
+    "dev": "npm run generate:icons && next dev",
+    "build": "npm run generate:icons && next build",
     "start": "next start"
   },
   "dependencies": {

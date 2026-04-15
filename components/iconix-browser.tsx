@@ -9,8 +9,14 @@ const DENSITY_PRESETS = [
   { id: "balanced", label: "Balanced", cardMin: 160, iconSize: 48 },
   { id: "showcase", label: "Large", cardMin: 188, iconSize: 60 },
 ] as const;
+const THEME_STORAGE_KEY = "iconix-theme";
+const THEME_DEFAULT_COLORS = {
+  dark: "#ffffff",
+  light: "#1f2228",
+} as const;
 
 type DensityPreset = (typeof DENSITY_PRESETS)[number]["id"];
+type ThemeMode = keyof typeof THEME_DEFAULT_COLORS;
 
 function formatCount(value: number) {
   return new Intl.NumberFormat("en-US").format(value);
@@ -23,8 +29,14 @@ function categoryId(categoryName: string) {
 export function IconixBrowser() {
   const [icons, setIcons] = useState<IconRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [theme, setTheme] = useState<ThemeMode>("dark");
   const [query, setQuery] = useState("");
   const [style, setStyle] = useState("All");
+  const [customColor, setCustomColor] = useState<string>(THEME_DEFAULT_COLORS.dark);
+  const [isCustomColorDirty, setIsCustomColorDirty] = useState(false);
+  const [customStrokeWidth, setCustomStrokeWidth] = useState(2);
+  const [customSize, setCustomSize] = useState(24);
+  const [absoluteStrokeWidth, setAbsoluteStrokeWidth] = useState(false);
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
   const [isActionOpen, setIsActionOpen] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -32,6 +44,7 @@ export function IconixBrowser() {
   const [previewScale, setPreviewScale] = useState(48);
   const [activeCategoryNav, setActiveCategoryNav] = useState("overview");
   const cacheRef = useRef(new Map<string, string>());
+  const searchRef = useRef<HTMLInputElement>(null);
   const deferredQuery = useDeferredValue(query);
 
   useEffect(() => {
@@ -56,6 +69,30 @@ export function IconixBrowser() {
   }, []);
 
   useEffect(() => {
+    const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+
+    if (storedTheme === "dark" || storedTheme === "light") {
+      setTheme(storedTheme);
+      return;
+    }
+
+    setTheme(
+      window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark",
+    );
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+  }, [theme]);
+
+  useEffect(() => {
+    if (!isCustomColorDirty) {
+      setCustomColor(THEME_DEFAULT_COLORS[theme]);
+    }
+  }, [isCustomColorDirty, theme]);
+
+  useEffect(() => {
     if (!status) {
       return;
     }
@@ -63,6 +100,29 @@ export function IconixBrowser() {
     const timeout = window.setTimeout(() => setStatus(null), 2200);
     return () => window.clearTimeout(timeout);
   }, [status]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        if (isActionOpen) {
+          setIsActionOpen(false);
+          return;
+        }
+        if (query) {
+          setQuery("");
+          return;
+        }
+      }
+      if (event.key === "/" && !isActionOpen) {
+        const active = document.activeElement;
+        if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) return;
+        event.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isActionOpen, query]);
 
   useEffect(() => {
     setActiveCategoryNav("overview");
@@ -129,13 +189,75 @@ export function IconixBrowser() {
     : null;
   const densityPreset =
     DENSITY_PRESETS.find((preset) => preset.id === density) ?? DENSITY_PRESETS[1];
-  const visibleCategoryCount = groupedIcons.length;
-  const hasFilters = Boolean(normalizedQuery) || style !== "All";
-  const filterSummary = normalizedQuery
-    ? `Results for "${deferredQuery.trim()}"`
-    : style === "All"
-      ? "Jump between icon families"
-      : `${style} style only`;
+  const resolvedCustomizerColor = /^#([0-9a-f]{6})$/i.test(customColor)
+    ? customColor
+    : THEME_DEFAULT_COLORS[theme];
+
+  useEffect(() => {
+    if (loading || groupedIcons.length === 0) {
+      return;
+    }
+
+    let frameId = 0;
+
+    const syncActiveCategory = () => {
+      const overviewTarget = document.getElementById("icon-explorer-top");
+      const activationOffset = 140;
+
+      if (!overviewTarget) {
+        return;
+      }
+
+      if (overviewTarget.getBoundingClientRect().top > activationOffset) {
+        setActiveCategoryNav((current) => (current === "overview" ? current : "overview"));
+        return;
+      }
+
+      let nextActiveCategory = "overview";
+
+      for (const group of groupedIcons) {
+        const section = document.getElementById(categoryId(group.category));
+
+        if (!section) {
+          continue;
+        }
+
+        if (section.getBoundingClientRect().top <= activationOffset) {
+          nextActiveCategory = group.category;
+          continue;
+        }
+
+        break;
+      }
+
+      setActiveCategoryNav((current) => (
+        current === nextActiveCategory ? current : nextActiveCategory
+      ));
+    };
+
+    const handleScroll = () => {
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+      }
+
+      frameId = window.requestAnimationFrame(syncActiveCategory);
+    };
+
+    syncActiveCategory();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    window.addEventListener("resize", handleScroll);
+
+    return () => {
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+      }
+      window.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("resize", handleScroll);
+    };
+  }, [groupedIcons, loading]);
+
+  const iconSrc = (slug: string) =>
+    `/api/icons/${slug}?color=${encodeURIComponent(resolvedCustomizerColor)}&strokeWidth=${customStrokeWidth}`;
 
   const scrollToCategory = (categoryName: string) => {
     const targetId = categoryName === "overview" ? "icon-explorer-top" : categoryId(categoryName);
@@ -203,11 +325,20 @@ export function IconixBrowser() {
       return;
     }
 
+    const iconProps = [
+      `size={${customSize}}`,
+      `color="${resolvedCustomizerColor}"`,
+      `strokeWidth={${customStrokeWidth}}`,
+      absoluteStrokeWidth ? `vectorEffect="non-scaling-stroke"` : null,
+    ]
+      .filter(Boolean)
+      .join(" ");
+
     const snippet = [
       `import { ${selectedIcon.componentName} } from "@/generated/components/${selectedIcon.componentName}";`,
       "",
       `export default function Example() {`,
-      `  return <${selectedIcon.componentName} size={24} color="currentColor" />;`,
+      `  return <${selectedIcon.componentName} ${iconProps} />;`,
       `}`,
     ].join("\n");
 
@@ -222,32 +353,96 @@ export function IconixBrowser() {
             <img alt="Vishwa Labs" src="/vishwalabs-logo.svg" />
           </div>
           <div>
-            <p className="sidebar-kicker">Icon Platform</p>
             <h1>Iconix</h1>
           </div>
         </div>
 
-        <div className="sidebar-overview">
-          <div className="sidebar-stat">
-            <span>Visible</span>
-            <strong>{formatCount(filteredIcons.length)}</strong>
+        <section className="sidebar-block sidebar-customizer">
+          <div className="sidebar-block-head">
+            <span>Customizer</span>
           </div>
-          <div className="sidebar-stat">
-            <span>Groups</span>
-            <strong>{formatCount(visibleCategoryCount)}</strong>
+
+          <div className="customizer-field">
+            <label className="customizer-label" htmlFor="icon-color-value">
+              Color
+            </label>
+            <div className="customizer-color-row">
+              <input
+                aria-label="Pick icon color"
+                className="customizer-color-swatch"
+                onChange={(event) => {
+                  setCustomColor(event.target.value);
+                  setIsCustomColorDirty(true);
+                }}
+                type="color"
+                value={resolvedCustomizerColor}
+              />
+              <input
+                id="icon-color-value"
+                aria-label="Icon color hex value"
+                className="customizer-input"
+                onChange={(event) => {
+                  setCustomColor(event.target.value);
+                  setIsCustomColorDirty(true);
+                }}
+                spellCheck={false}
+                type="text"
+                value={customColor}
+              />
+            </div>
           </div>
-          <div className="sidebar-stat">
-            <span>Styles</span>
-            <strong>{formatCount(styles.length - 1)}</strong>
+
+          <div className="customizer-field">
+            <label className="customizer-label" htmlFor="icon-stroke-width">
+              Stroke width
+            </label>
+            <div className="customizer-stepper">
+              <input
+                id="icon-stroke-width"
+                aria-label="Icon stroke width"
+                className="customizer-number"
+                min="1"
+                onChange={(event) => setCustomStrokeWidth(Number(event.target.value) || 1)}
+                step="0.5"
+                type="number"
+                value={customStrokeWidth}
+              />
+              <span>px</span>
+            </div>
           </div>
-        </div>
+
+          <div className="customizer-field">
+            <label className="customizer-label" htmlFor="icon-size">
+              Size
+            </label>
+            <div className="customizer-stepper">
+              <input
+                id="icon-size"
+                aria-label="Icon size"
+                className="customizer-number"
+                min="12"
+                onChange={(event) => setCustomSize(Number(event.target.value) || 12)}
+                step="1"
+                type="number"
+                value={customSize}
+              />
+              <span>px</span>
+            </div>
+          </div>
+
+          <label className="customizer-toggle">
+            <input
+              checked={absoluteStrokeWidth}
+              onChange={(event) => setAbsoluteStrokeWidth(event.target.checked)}
+              type="checkbox"
+            />
+            <span>Absolute stroke width</span>
+          </label>
+        </section>
 
         <section className="sidebar-block sidebar-category-block">
           <div className="sidebar-block-head">
-            <div>
-              <span>Categories</span>
-              <p>{filterSummary}</p>
-            </div>
+            <span>Categories</span>
             <strong>{formatCount(categoryEntries.length)}</strong>
           </div>
           <button
@@ -255,12 +450,7 @@ export function IconixBrowser() {
             onClick={() => scrollToCategory("overview")}
             type="button"
           >
-            <span className="sidebar-item-copy">
-              <span className="sidebar-item-title">All icons</span>
-              <span className="sidebar-item-meta">
-                {hasFilters ? "Filtered selection" : "Full library overview"}
-              </span>
-            </span>
+            <span className="sidebar-item-label">All</span>
             <strong>{formatCount(filteredIcons.length)}</strong>
           </button>
           <div className="sidebar-list">
@@ -272,15 +462,8 @@ export function IconixBrowser() {
                 onClick={() => scrollToCategory(name)}
                 type="button"
               >
-                <span className="sidebar-item-copy">
-                  <span className="sidebar-item-title">{name}</span>
-                  <span className="sidebar-item-meta">
-                    {formatCount(filteredCategoryCountMap.get(name) ?? 0)} visible
-                  </span>
-                </span>
-                <strong>
-                  {formatCount(count)}
-                </strong>
+                <span className="sidebar-item-label">{name}</span>
+                <strong>{formatCount(count)}</strong>
               </button>
             ))}
           </div>
@@ -296,6 +479,13 @@ export function IconixBrowser() {
 
           <div className="dashboard-topbar-actions">
             {status ? <span className="dashboard-status">{status}</span> : null}
+            <button
+              className="button-ghost"
+              onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
+              type="button"
+            >
+              {theme === "dark" ? "Light mode" : "Dark mode"}
+            </button>
             <button
               className="button-ghost"
               onClick={() => {
@@ -320,64 +510,67 @@ export function IconixBrowser() {
           }
         >
           <div className="explorer-toolbar" id="icon-explorer-top">
-            <input
-              aria-label="Search icons"
-              className="input"
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search icons"
-              value={query}
-            />
-
-            <select
-              aria-label="Filter by style"
-              className="select"
-              onChange={(event) => setStyle(event.target.value)}
-              value={style}
-            >
-              {styles.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
-
-            <select
-              aria-label="Grid density"
-              className="select"
-              onChange={(event) => {
-                const nextDensity = event.target.value as DensityPreset;
-                const preset =
-                  DENSITY_PRESETS.find((item) => item.id === nextDensity) ?? DENSITY_PRESETS[1];
-                setDensity(nextDensity);
-                setPreviewScale(preset.iconSize);
-              }}
-              value={density}
-            >
-              {DENSITY_PRESETS.map((preset) => (
-                <option key={preset.id} value={preset.id}>
-                  {preset.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="compact-toolbar">
-            <div className="compact-toolbar-meta">
-              <span>{formatCount(filteredIcons.length)} icons</span>
-              <span>{formatCount(groupedIcons.length)} groups</span>
-            </div>
-            <div className="compact-range">
-              <label htmlFor="icon-size-range">Size</label>
+            <div className="search-wrapper">
               <input
-                id="icon-size-range"
-                aria-label="Adjust icon preview size"
-                className="range-input"
-                max="76"
-                min="32"
-                onChange={(event) => setPreviewScale(Number(event.target.value))}
-                type="range"
-                value={previewScale}
+                ref={searchRef}
+                aria-label="Search icons"
+                className="input"
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder='Search icons  ( / to focus )'
+                value={query}
               />
+              {query && (
+                <button
+                  aria-label="Clear search"
+                  className="search-clear"
+                  onClick={() => setQuery("")}
+                  type="button"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+
+            <div className="select-shell">
+              <select
+                aria-label="Filter by style"
+                className="select"
+                onChange={(event) => setStyle(event.target.value)}
+                value={style}
+              >
+                {styles.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+              </select>
+              <span aria-hidden="true" className="select-chevron">
+                ˅
+              </span>
+            </div>
+
+            <div className="select-shell">
+              <select
+                aria-label="Grid density"
+                className="select"
+                onChange={(event) => {
+                  const nextDensity = event.target.value as DensityPreset;
+                  const preset =
+                    DENSITY_PRESETS.find((item) => item.id === nextDensity) ?? DENSITY_PRESETS[1];
+                  setDensity(nextDensity);
+                  setPreviewScale(preset.iconSize);
+                }}
+                value={density}
+              >
+                {DENSITY_PRESETS.map((preset) => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+              <span aria-hidden="true" className="select-chevron">
+                ˅
+              </span>
             </div>
           </div>
 
@@ -418,7 +611,7 @@ export function IconixBrowser() {
                         type="button"
                       >
                         <div className="icon-card-preview">
-                          <img alt={icon.label} loading="lazy" src={`/api/icons/${icon.slug}`} />
+                          <img alt={icon.label} loading="lazy" src={iconSrc(icon.slug)} />
                         </div>
                         <div className="icon-card-copy">
                           <div className="icon-card-name">{icon.label}</div>
@@ -448,7 +641,14 @@ export function IconixBrowser() {
           >
             <div className="action-sheet-head">
               <div className="action-sheet-preview">
-                <img alt={selectedIcon.label} src={`/api/icons/${selectedIcon.slug}`} />
+                <img
+                  alt={selectedIcon.label}
+                  src={iconSrc(selectedIcon.slug)}
+                  style={{
+                    width: Math.min(customSize, 56),
+                    height: Math.min(customSize, 56),
+                  }}
+                />
               </div>
               <div className="action-sheet-copy">
                 <h3>{selectedIcon.label}</h3>

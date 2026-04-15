@@ -1,15 +1,16 @@
 import type { Metadata } from "next";
-import { Bricolage_Grotesque, Space_Grotesk } from "next/font/google";
+import { Space_Grotesk, Space_Mono } from "next/font/google";
 import "./globals.css";
-
-const headingFont = Bricolage_Grotesque({
-  subsets: ["latin"],
-  variable: "--font-heading",
-});
 
 const bodyFont = Space_Grotesk({
   subsets: ["latin"],
   variable: "--font-body",
+});
+
+const monoFont = Space_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono",
+  weight: ["400", "700"],
 });
 
 export const metadata: Metadata = {
@@ -29,7 +30,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${headingFont.variable} ${bodyFont.variable}`}>
+      <body className={`${bodyFont.variable} ${monoFont.variable}`}>
         {children}
       </body>
     </html>
