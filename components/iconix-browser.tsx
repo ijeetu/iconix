@@ -1,13 +1,13 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { useDeferredValue, useEffect, useRef, useState } from "react";
-import type { IconRecord } from "@/lib/icon-types";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import type { SlimIconRecord } from "@/lib/icon-types";
 
 const DENSITY_PRESETS = [
-  { id: "compact", label: "Compact", cardMin: 88, iconSize: 24 },
-  { id: "balanced", label: "Balanced", cardMin: 108, iconSize: 32 },
-  { id: "showcase", label: "Large", cardMin: 140, iconSize: 44 },
+  { id: "compact",  label: "Compact",  cardMin:  76, iconSize: 24, nameFontSize: "0.74rem", metaFontSize: "0.62rem" },
+  { id: "balanced", label: "Balanced", cardMin:  96, iconSize: 32, nameFontSize: "0.82rem", metaFontSize: "0.68rem" },
+  { id: "showcase", label: "Large",    cardMin: 128, iconSize: 44, nameFontSize: "0.82rem", metaFontSize: "0.68rem" },
 ] as const;
 const THEME_STORAGE_KEY = "iconix-theme";
 const THEME_DEFAULT_COLORS = {
@@ -17,6 +17,8 @@ const THEME_DEFAULT_COLORS = {
 
 type DensityPreset = (typeof DENSITY_PRESETS)[number]["id"];
 type ThemeMode = keyof typeof THEME_DEFAULT_COLORS;
+
+// ─── Custom Select ────────────────────────────────────────────────────────────
 
 function CustomSelect({
   value,
@@ -84,6 +86,89 @@ function CustomSelect({
   );
 }
 
+// ─── Lazy Icon Section ────────────────────────────────────────────────────────
+// Defers rendering the icon grid until the section approaches the viewport.
+// Reduces initial DOM from ~6000 nodes to ~100 for first-paint.
+
+function LazyIconSection({
+  group,
+  color,
+  selectedSlug,
+  onIconClick,
+}: {
+  group: { category: string; totalCount: number; visibleCount: number; items: SlimIconRecord[] };
+  color: string;
+  selectedSlug: string | null;
+  onIconClick: (icon: SlimIconRecord) => void;
+}) {
+  const [rendered, setRendered] = useState(false);
+  const sectionRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setRendered(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "600px 0px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <section
+      ref={sectionRef}
+      className="category-section"
+      id={categoryId(group.category)}
+    >
+      <div className="category-section-head">
+        <div>
+          <h4>{group.category}</h4>
+          <p>{formatCount(group.visibleCount)} icons</p>
+        </div>
+      </div>
+      {rendered ? (
+        <div className="icon-grid">
+          {group.items.map((icon) => (
+            <button
+              key={icon.slug}
+              className={`icon-card ${icon.slug === selectedSlug ? "active" : ""}`}
+              onClick={() => onIconClick(icon)}
+              type="button"
+            >
+              <div className="icon-card-preview">
+                <img
+                  alt={icon.label}
+                  loading="lazy"
+                  src={`/api/icons/${icon.slug}?color=${encodeURIComponent(color)}`}
+                />
+              </div>
+              <div className="icon-card-copy">
+                <div className="icon-card-name">{icon.label}</div>
+                <div className="icon-card-meta">{icon.style}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+      ) : (
+        // Placeholder keeps correct scroll height while icons are off-screen
+        <div
+          aria-hidden="true"
+          className="icon-grid-placeholder"
+          style={{ minHeight: `${Math.ceil(group.items.length / 7) * 128}px` }}
+        />
+      )}
+    </section>
+  );
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 function formatCount(value: number) {
   return new Intl.NumberFormat("en-US").format(value);
 }
@@ -92,9 +177,9 @@ function categoryId(categoryName: string) {
   return `category-${categoryName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
 }
 
-export function IconixBrowser() {
-  const [icons, setIcons] = useState<IconRecord[]>([]);
-  const [loading, setLoading] = useState(true);
+// ─── Main Component ───────────────────────────────────────────────────────────
+
+export function IconixBrowser({ initialIcons }: { initialIcons: SlimIconRecord[] }) {
   const [theme, setTheme] = useState<ThemeMode>("dark");
   const [query, setQuery] = useState("");
   const [style, setStyle] = useState("All");
@@ -107,41 +192,20 @@ export function IconixBrowser() {
   const [highlightedSearchIndex, setHighlightedSearchIndex] = useState(0);
   const [status, setStatus] = useState<string | null>(null);
   const [density, setDensity] = useState<DensityPreset>("balanced");
-  const [previewScale, setPreviewScale] = useState(48);
   const [activeCategoryNav, setActiveCategoryNav] = useState("overview");
   const cacheRef = useRef(new Map<string, string>());
   const searchRef = useRef<HTMLInputElement>(null);
+
   const deferredQuery = useDeferredValue(query);
 
-  useEffect(() => {
-    let active = true;
-
-    fetch("/api/manifest")
-      .then((response) => response.json())
-      .then((data: IconRecord[]) => {
-        if (active) {
-          setIcons(data);
-        }
-      })
-      .finally(() => {
-        if (active) {
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
+  // ── Theme init ──────────────────────────────────────────────────────────────
 
   useEffect(() => {
     const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
-
     if (storedTheme === "dark" || storedTheme === "light") {
       setTheme(storedTheme);
       return;
     }
-
     setTheme(
       window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark",
     );
@@ -158,98 +222,109 @@ export function IconixBrowser() {
     }
   }, [isCustomColorDirty, theme]);
 
-  useEffect(() => {
-    if (!status) {
-      return;
-    }
+  // ── Status toast ────────────────────────────────────────────────────────────
 
+  useEffect(() => {
+    if (!status) return;
     const timeout = window.setTimeout(() => setStatus(null), 2200);
     return () => window.clearTimeout(timeout);
   }, [status]);
 
-  useEffect(() => {
-    if (!isSearchOpen) {
-      return;
-    }
+  // ── Search modal focus ──────────────────────────────────────────────────────
 
+  useEffect(() => {
+    if (!isSearchOpen) return;
     const frameId = window.requestAnimationFrame(() => searchRef.current?.focus());
     return () => window.cancelAnimationFrame(frameId);
   }, [isSearchOpen]);
+
+  // ── Reset nav when filter changes ───────────────────────────────────────────
 
   useEffect(() => {
     setActiveCategoryNav("overview");
   }, [deferredQuery, style]);
 
-  const categoryCountMap = new Map<string, number>();
-  const styleCountMap = new Map<string, number>();
+  // ── Derived / memoized values ───────────────────────────────────────────────
 
-  for (const icon of icons) {
-    categoryCountMap.set(icon.category, (categoryCountMap.get(icon.category) ?? 0) + 1);
-    styleCountMap.set(icon.style, (styleCountMap.get(icon.style) ?? 0) + 1);
-  }
-
-  const categoryEntries = [...categoryCountMap.entries()].sort((left, right) => {
-    if (right[1] !== left[1]) {
-      return right[1] - left[1];
-    }
-
-    return left[0].localeCompare(right[0]);
-  });
-  const styles = ["All", ...[...styleCountMap.keys()].sort((left, right) => left.localeCompare(right))];
-  const normalizedQuery = deferredQuery.trim().toLowerCase();
-
-  const filteredIcons = icons.filter((icon) => {
-    if (style !== "All" && icon.style !== style) {
-      return false;
-    }
-
-    if (!normalizedQuery) {
-      return true;
-    }
-
-    return [
-      icon.slug,
-      icon.label,
-      icon.category,
-      icon.style,
-      icon.componentName,
-    ]
-      .join(" ")
-      .toLowerCase()
-      .includes(normalizedQuery);
-  });
-  const commandResults = normalizedQuery ? filteredIcons.slice(0, 50) : [];
-
-  const filteredCategoryCountMap = new Map<string, number>();
-  for (const icon of filteredIcons) {
-    filteredCategoryCountMap.set(
-      icon.category,
-      (filteredCategoryCountMap.get(icon.category) ?? 0) + 1,
-    );
-  }
-
-  const groupedIcons = categoryEntries
-    .map(([categoryName, totalCount]) => ({
-      category: categoryName,
-      totalCount,
-      visibleCount: filteredCategoryCountMap.get(categoryName) ?? 0,
-      items: filteredIcons.filter((icon) => icon.category === categoryName),
-    }))
-    .filter((group) => group.items.length > 0);
-
-  const selectedIcon = selectedSlug
-    ? icons.find((icon) => icon.slug === selectedSlug) ?? null
-    : null;
-  const densityPreset =
-    DENSITY_PRESETS.find((preset) => preset.id === density) ?? DENSITY_PRESETS[1];
   const resolvedCustomizerColor = /^#([0-9a-f]{6})$/i.test(customColor)
     ? customColor
     : THEME_DEFAULT_COLORS[theme];
 
-  useEffect(() => {
-    if (loading || groupedIcons.length === 0) {
-      return;
+  // Deferred color: prevents all icon images from reloading on every drag tick
+  const deferredColor = useDeferredValue(resolvedCustomizerColor);
+
+  const normalizedQuery = useMemo(
+    () => deferredQuery.trim().toLowerCase(),
+    [deferredQuery],
+  );
+
+  const { categoryEntries, styleOptions } = useMemo(() => {
+    const catCount = new Map<string, number>();
+    const styleCount = new Map<string, number>();
+    for (const icon of initialIcons) {
+      catCount.set(icon.category, (catCount.get(icon.category) ?? 0) + 1);
+      styleCount.set(icon.style, (styleCount.get(icon.style) ?? 0) + 1);
     }
+    const entries = [...catCount.entries()].sort((a, b) => {
+      if (b[1] !== a[1]) return b[1] - a[1];
+      return a[0].localeCompare(b[0]);
+    });
+    const options = ["All", ...[...styleCount.keys()].sort((a, b) => a.localeCompare(b))];
+    return { categoryEntries: entries, styleOptions: options };
+  }, [initialIcons]);
+
+  const filteredIcons = useMemo(() => {
+    return initialIcons.filter((icon) => {
+      if (style !== "All" && icon.style !== style) return false;
+      if (!normalizedQuery) return true;
+      return [icon.slug, icon.label, icon.category, icon.style, icon.componentName]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedQuery);
+    });
+  }, [initialIcons, style, normalizedQuery]);
+
+  const commandResults = useMemo(
+    () => (normalizedQuery ? filteredIcons.slice(0, 50) : []),
+    [normalizedQuery, filteredIcons],
+  );
+
+  const { filteredCategoryCountMap, groupedIcons } = useMemo(() => {
+    // Build filtered count map and grouped sections in a single O(n) pass
+    const byCategory = new Map<string, SlimIconRecord[]>();
+    const countMap = new Map<string, number>();
+
+    for (const icon of filteredIcons) {
+      let arr = byCategory.get(icon.category);
+      if (!arr) { arr = []; byCategory.set(icon.category, arr); }
+      arr.push(icon);
+      countMap.set(icon.category, (countMap.get(icon.category) ?? 0) + 1);
+    }
+
+    const groups = categoryEntries
+      .map(([name, totalCount]) => ({
+        category: name,
+        totalCount,
+        visibleCount: countMap.get(name) ?? 0,
+        items: byCategory.get(name) ?? [],
+      }))
+      .filter((g) => g.items.length > 0);
+
+    return { filteredCategoryCountMap: countMap, groupedIcons: groups };
+  }, [filteredIcons, categoryEntries]);
+
+  const selectedIcon = useMemo(
+    () => (selectedSlug ? initialIcons.find((i) => i.slug === selectedSlug) ?? null : null),
+    [selectedSlug, initialIcons],
+  );
+
+  const densityPreset =
+    DENSITY_PRESETS.find((p) => p.id === density) ?? DENSITY_PRESETS[1];
+
+  // ── Scroll-spy for sidebar nav ──────────────────────────────────────────────
+
+  useEffect(() => {
+    if (groupedIcons.length === 0) return;
 
     let frameId = 0;
 
@@ -257,42 +332,29 @@ export function IconixBrowser() {
       const overviewTarget = document.getElementById("icon-explorer-top");
       const activationOffset = 140;
 
-      if (!overviewTarget) {
-        return;
-      }
+      if (!overviewTarget) return;
 
       if (overviewTarget.getBoundingClientRect().top > activationOffset) {
-        setActiveCategoryNav((current) => (current === "overview" ? current : "overview"));
+        setActiveCategoryNav((c) => (c === "overview" ? c : "overview"));
         return;
       }
 
-      let nextActiveCategory = "overview";
-
+      let nextActive = "overview";
       for (const group of groupedIcons) {
         const section = document.getElementById(categoryId(group.category));
-
-        if (!section) {
-          continue;
-        }
-
+        if (!section) continue;
         if (section.getBoundingClientRect().top <= activationOffset) {
-          nextActiveCategory = group.category;
+          nextActive = group.category;
           continue;
         }
-
         break;
       }
 
-      setActiveCategoryNav((current) => (
-        current === nextActiveCategory ? current : nextActiveCategory
-      ));
+      setActiveCategoryNav((c) => (c === nextActive ? c : nextActive));
     };
 
     const handleScroll = () => {
-      if (frameId) {
-        window.cancelAnimationFrame(frameId);
-      }
-
+      if (frameId) window.cancelAnimationFrame(frameId);
       frameId = window.requestAnimationFrame(syncActiveCategory);
     };
 
@@ -301,26 +363,20 @@ export function IconixBrowser() {
     window.addEventListener("resize", handleScroll);
 
     return () => {
-      if (frameId) {
-        window.cancelAnimationFrame(frameId);
-      }
+      if (frameId) window.cancelAnimationFrame(frameId);
       window.removeEventListener("scroll", handleScroll);
       window.removeEventListener("resize", handleScroll);
     };
-  }, [groupedIcons, loading]);
+  }, [groupedIcons]);
 
   useEffect(() => {
-    if (!isSearchOpen) {
-      return;
-    }
-
+    if (!isSearchOpen) return;
     setHighlightedSearchIndex(0);
   }, [isSearchOpen, query, style]);
 
-  const iconSrc = (slug: string) =>
-    `/api/icons/${slug}?color=${encodeURIComponent(resolvedCustomizerColor)}`;
+  // ── Actions ─────────────────────────────────────────────────────────────────
 
-  const openIconActions = (icon: IconRecord) => {
+  const openIconActions = (icon: SlimIconRecord) => {
     setSelectedSlug(icon.slug);
     setIsSearchOpen(false);
     setIsActionOpen(true);
@@ -329,20 +385,13 @@ export function IconixBrowser() {
   const scrollToCategory = (categoryName: string) => {
     const targetId = categoryName === "overview" ? "icon-explorer-top" : categoryId(categoryName);
     const target = document.getElementById(targetId);
-
-    if (!target) {
-      return;
-    }
-
+    if (!target) return;
     setActiveCategoryNav(categoryName);
     target.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const fetchText = async (url: string) => {
-    if (cacheRef.current.has(url)) {
-      return cacheRef.current.get(url)!;
-    }
-
+    if (cacheRef.current.has(url)) return cacheRef.current.get(url)!;
     const response = await fetch(url);
     const text = await response.text();
     cacheRef.current.set(url, text);
@@ -355,10 +404,7 @@ export function IconixBrowser() {
   };
 
   const copySvg = async () => {
-    if (!selectedIcon) {
-      return;
-    }
-
+    if (!selectedIcon) return;
     const svg = await fetchText(
       `/api/icons/${selectedIcon.slug}?color=${encodeURIComponent(resolvedCustomizerColor)}`,
     );
@@ -366,21 +412,13 @@ export function IconixBrowser() {
   };
 
   const copyComponent = async () => {
-    if (!selectedIcon) {
-      return;
-    }
-
-    const component = await fetchText(
-      `/api/icons/${selectedIcon.slug}?format=component`,
-    );
+    if (!selectedIcon) return;
+    const component = await fetchText(`/api/icons/${selectedIcon.slug}?format=component`);
     await copyText("React component", component);
   };
 
   const downloadSvg = () => {
-    if (!selectedIcon) {
-      return;
-    }
-
+    if (!selectedIcon) return;
     const link = document.createElement("a");
     link.href = `/api/icons/${selectedIcon.slug}?download=1&color=${encodeURIComponent(resolvedCustomizerColor)}`;
     link.download = `${selectedIcon.slug}.svg`;
@@ -390,15 +428,8 @@ export function IconixBrowser() {
   };
 
   const copyUsageSnippet = async () => {
-    if (!selectedIcon) {
-      return;
-    }
-
-    const iconProps = [
-      `size={${customSize}}`,
-      `color="${resolvedCustomizerColor}"`,
-    ].join(" ");
-
+    if (!selectedIcon) return;
+    const iconProps = [`size={${customSize}}`, `color="${resolvedCustomizerColor}"`].join(" ");
     const snippet = [
       `import { ${selectedIcon.componentName} } from "@/generated/components/${selectedIcon.componentName}";`,
       "",
@@ -406,9 +437,10 @@ export function IconixBrowser() {
       `  return <${selectedIcon.componentName} ${iconProps} />;`,
       `}`,
     ].join("\n");
-
     await copyText("Usage snippet", snippet);
   };
+
+  // ── Keyboard shortcuts ──────────────────────────────────────────────────────
 
   useEffect(() => {
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -422,48 +454,30 @@ export function IconixBrowser() {
         if (event.key === "ArrowDown") {
           event.preventDefault();
           if (commandResults.length > 0) {
-            setHighlightedSearchIndex((current) => (
-              current + 1 >= commandResults.length ? 0 : current + 1
-            ));
+            setHighlightedSearchIndex((c) => (c + 1 >= commandResults.length ? 0 : c + 1));
           }
           return;
         }
-
         if (event.key === "ArrowUp") {
           event.preventDefault();
           if (commandResults.length > 0) {
-            setHighlightedSearchIndex((current) => (
-              current - 1 < 0 ? commandResults.length - 1 : current - 1
-            ));
+            setHighlightedSearchIndex((c) => (c - 1 < 0 ? commandResults.length - 1 : c - 1));
           }
           return;
         }
-
         if (event.key === "Enter") {
           const activeResult = commandResults[highlightedSearchIndex];
-
-          if (activeResult) {
-            event.preventDefault();
-            openIconActions(activeResult);
-          }
+          if (activeResult) { event.preventDefault(); openIconActions(activeResult); }
           return;
         }
       }
 
       if (event.key === "Escape") {
-        if (isActionOpen) {
-          setIsActionOpen(false);
-          return;
-        }
-        if (isSearchOpen) {
-          setIsSearchOpen(false);
-          return;
-        }
-        if (query) {
-          setQuery("");
-          return;
-        }
+        if (isActionOpen) { setIsActionOpen(false); return; }
+        if (isSearchOpen) { setIsSearchOpen(false); return; }
+        if (query) { setQuery(""); return; }
       }
+
       if (event.key === "/" && !isActionOpen && !isSearchOpen) {
         const active = document.activeElement;
         if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) return;
@@ -471,15 +485,12 @@ export function IconixBrowser() {
         setIsSearchOpen(true);
       }
     };
+
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [
-    commandResults,
-    highlightedSearchIndex,
-    isActionOpen,
-    isSearchOpen,
-    query,
-  ]);
+  }, [commandResults, highlightedSearchIndex, isActionOpen, isSearchOpen, query]);
+
+  // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
     <main className="dashboard-shell simple-shell">
@@ -499,17 +510,12 @@ export function IconixBrowser() {
           </div>
 
           <div className="customizer-field">
-            <label className="customizer-label" htmlFor="icon-color-value">
-              Color
-            </label>
+            <label className="customizer-label" htmlFor="icon-color-value">Color</label>
             <div className="customizer-color-row">
               <input
                 aria-label="Pick icon color"
                 className="customizer-color-swatch"
-                onChange={(event) => {
-                  setCustomColor(event.target.value);
-                  setIsCustomColorDirty(true);
-                }}
+                onChange={(event) => { setCustomColor(event.target.value); setIsCustomColorDirty(true); }}
                 type="color"
                 value={resolvedCustomizerColor}
               />
@@ -517,10 +523,7 @@ export function IconixBrowser() {
                 id="icon-color-value"
                 aria-label="Icon color hex value"
                 className="customizer-input"
-                onChange={(event) => {
-                  setCustomColor(event.target.value);
-                  setIsCustomColorDirty(true);
-                }}
+                onChange={(event) => { setCustomColor(event.target.value); setIsCustomColorDirty(true); }}
                 spellCheck={false}
                 type="text"
                 value={customColor}
@@ -529,9 +532,7 @@ export function IconixBrowser() {
           </div>
 
           <div className="customizer-field">
-            <label className="customizer-label" htmlFor="icon-size">
-              Size
-            </label>
+            <label className="customizer-label" htmlFor="icon-size">Size</label>
             <div className="customizer-stepper">
               <input
                 id="icon-size"
@@ -590,7 +591,7 @@ export function IconixBrowser() {
             <button
               aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
               className="button-ghost theme-toggle"
-              onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
+              onClick={() => setTheme((c) => (c === "dark" ? "light" : "dark"))}
               type="button"
             >
               {theme === "dark" ? (
@@ -606,11 +607,7 @@ export function IconixBrowser() {
             </button>
             <button
               className="button-ghost"
-              onClick={() => {
-                setQuery("");
-                setStyle("All");
-                setActiveCategoryNav("overview");
-              }}
+              onClick={() => { setQuery(""); setStyle("All"); setActiveCategoryNav("overview"); }}
               type="button"
             >
               Reset
@@ -623,8 +620,10 @@ export function IconixBrowser() {
           style={
             {
               "--icon-card-min": `${densityPreset.cardMin}px`,
-              "--icon-preview-size": `${previewScale}px`,
-              "--icon-card-preview-h": `${previewScale * 2}px`,
+              "--icon-preview-size": `${densityPreset.iconSize}px`,
+              "--icon-card-preview-h": `${densityPreset.iconSize * 2}px`,
+              "--icon-card-font-name": densityPreset.nameFontSize,
+              "--icon-card-font-meta": densityPreset.metaFontSize,
             } as CSSProperties
           }
         >
@@ -644,29 +643,19 @@ export function IconixBrowser() {
             <CustomSelect
               ariaLabel="Filter by style"
               onChange={setStyle}
-              options={styles.map((s) => ({ value: s, label: s }))}
+              options={styleOptions.map((s) => ({ value: s, label: s }))}
               value={style}
             />
 
             <CustomSelect
               ariaLabel="Grid density"
-              onChange={(val) => {
-                const nextDensity = val as DensityPreset;
-                const preset = DENSITY_PRESETS.find((p) => p.id === nextDensity) ?? DENSITY_PRESETS[1];
-                setDensity(nextDensity);
-                setPreviewScale(preset.iconSize);
-              }}
+              onChange={(val) => setDensity(val as DensityPreset)}
               options={DENSITY_PRESETS.map((p) => ({ value: p.id, label: p.label }))}
               value={density}
             />
           </div>
 
-          {loading ? (
-            <div className="empty">
-              <h3>Loading icons</h3>
-              <p>Preparing the catalog.</p>
-            </div>
-          ) : groupedIcons.length === 0 ? (
+          {groupedIcons.length === 0 ? (
             <div className="empty">
               <h3>No results</h3>
               <p>Try a broader search or another style.</p>
@@ -674,37 +663,13 @@ export function IconixBrowser() {
           ) : (
             <div className="catalog-sections">
               {groupedIcons.map((group) => (
-                <section
+                <LazyIconSection
                   key={group.category}
-                  className="category-section"
-                  id={categoryId(group.category)}
-                >
-                  <div className="category-section-head">
-                    <div>
-                      <h4>{group.category}</h4>
-                      <p>{formatCount(group.visibleCount)} icons</p>
-                    </div>
-                  </div>
-
-                  <div className="icon-grid">
-                    {group.items.map((icon) => (
-                      <button
-                        key={icon.slug}
-                        className={`icon-card ${icon.slug === selectedIcon?.slug ? "active" : ""}`}
-                        onClick={() => openIconActions(icon)}
-                        type="button"
-                      >
-                        <div className="icon-card-preview">
-                          <img alt={icon.label} loading="lazy" src={iconSrc(icon.slug)} />
-                        </div>
-                        <div className="icon-card-copy">
-                          <div className="icon-card-name">{icon.label}</div>
-                          <div className="icon-card-meta">{icon.style}</div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </section>
+                  color={deferredColor}
+                  group={group}
+                  onIconClick={openIconActions}
+                  selectedSlug={selectedSlug}
+                />
               ))}
             </div>
           )}
@@ -727,11 +692,8 @@ export function IconixBrowser() {
               <div className="action-sheet-preview">
                 <img
                   alt={selectedIcon.label}
-                  src={iconSrc(selectedIcon.slug)}
-                  style={{
-                    width: Math.min(customSize, 56),
-                    height: Math.min(customSize, 56),
-                  }}
+                  src={`/api/icons/${selectedIcon.slug}?color=${encodeURIComponent(resolvedCustomizerColor)}`}
+                  style={{ width: Math.min(customSize, 56), height: Math.min(customSize, 56) }}
                 />
               </div>
               <div className="action-sheet-copy">
@@ -748,18 +710,10 @@ export function IconixBrowser() {
             </div>
 
             <div className="action-sheet-actions">
-              <button className="button" onClick={copySvg} type="button">
-                Copy SVG
-              </button>
-              <button className="button-ghost" onClick={downloadSvg} type="button">
-                Download SVG
-              </button>
-              <button className="button-ghost" onClick={copyComponent} type="button">
-                Copy React Component
-              </button>
-              <button className="button-ghost" onClick={copyUsageSnippet} type="button">
-                Copy Usage Snippet
-              </button>
+              <button className="button" onClick={copySvg} type="button">Copy SVG</button>
+              <button className="button-ghost" onClick={downloadSvg} type="button">Download SVG</button>
+              <button className="button-ghost" onClick={copyComponent} type="button">Copy React Component</button>
+              <button className="button-ghost" onClick={copyUsageSnippet} type="button">Copy Usage Snippet</button>
             </div>
           </div>
         </div>
@@ -819,7 +773,11 @@ export function IconixBrowser() {
                     type="button"
                   >
                     <span className="search-result-preview">
-                      <img alt={icon.label} loading="lazy" src={iconSrc(icon.slug)} />
+                      <img
+                        alt={icon.label}
+                        loading="lazy"
+                        src={`/api/icons/${icon.slug}?color=${encodeURIComponent(resolvedCustomizerColor)}`}
+                      />
                     </span>
                     <span className="search-result-copy">
                       <span className="search-result-name">{icon.label}</span>

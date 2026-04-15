@@ -8,3 +8,6 @@ export type IconRecord = {
   filePath: string;
   componentPath: string;
 };
+
+// Client-safe subset — no server-only file paths
+export type SlimIconRecord = Omit<IconRecord, "filePath" | "componentPath">;

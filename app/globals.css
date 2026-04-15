@@ -729,7 +729,7 @@ button {
 
 .icon-card-name {
   font-weight: 400;
-  font-size: 0.82rem;
+  font-size: var(--icon-card-font-name, 0.82rem);
   line-height: 1.3;
   color: var(--text);
   white-space: nowrap;
@@ -739,13 +739,17 @@ button {
 
 .icon-card-meta {
   color: var(--muted-2);
-  font-size: 0.68rem;
+  font-size: var(--icon-card-font-meta, 0.68rem);
   font-family: var(--font-mono), ui-monospace, monospace;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.icon-grid-placeholder {
+  border-radius: var(--radius-md);
 }
 
 .button,
