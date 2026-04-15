@@ -1,0 +1,7 @@
+node_modules
+.next
+out
+dist
+
+generated/icon-manifest.json
+generated/components
