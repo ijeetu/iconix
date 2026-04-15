@@ -481,7 +481,8 @@ button {
 
 .search-trigger-shortcut,
 .search-modal-meta span {
-  padding: 4px 8px;
+  padding: 1px 6px;
+  line-height: 1;
   border: 1px solid var(--line-strong);
   border-radius: 0;
   color: var(--muted-2);
