@@ -95,11 +95,13 @@ function LazyIconSection({
   color,
   selectedSlug,
   onIconClick,
+  cardMin,
 }: {
   group: { category: string; totalCount: number; visibleCount: number; items: SlimIconRecord[] };
   color: string;
   selectedSlug: string | null;
   onIconClick: (icon: SlimIconRecord) => void;
+  cardMin: number;
 }) {
   const [rendered, setRendered] = useState(false);
   const sectionRef = useRef<HTMLElement>(null);
@@ -137,30 +139,25 @@ function LazyIconSection({
           {group.items.map((icon) => (
             <button
               key={icon.slug}
+              aria-label={icon.label}
               className={`icon-card ${icon.slug === selectedSlug ? "active" : ""}`}
               onClick={() => onIconClick(icon)}
+              title={icon.label}
               type="button"
             >
-              <div className="icon-card-preview">
-                <img
-                  alt={icon.label}
-                  loading="lazy"
-                  src={`/api/icons/${icon.slug}?color=${encodeURIComponent(color)}`}
-                />
-              </div>
-              <div className="icon-card-copy">
-                <div className="icon-card-name">{icon.label}</div>
-                <div className="icon-card-meta">{icon.style}</div>
-              </div>
+              <img
+                alt={icon.label}
+                loading="lazy"
+                src={`/api/icons/${icon.slug}?color=${encodeURIComponent(color)}`}
+              />
             </button>
           ))}
         </div>
       ) : (
-        // Placeholder keeps correct scroll height while icons are off-screen
         <div
           aria-hidden="true"
           className="icon-grid-placeholder"
-          style={{ minHeight: `${Math.ceil(group.items.length / 7) * 128}px` }}
+          style={{ minHeight: `${Math.ceil(group.items.length / Math.floor(900 / (cardMin + 6))) * (cardMin + 6)}px` }}
         />
       )}
     </section>
@@ -670,6 +667,7 @@ export function IconixBrowser({ initialIcons }: { initialIcons: SlimIconRecord[]
               {groupedIcons.map((group) => (
                 <LazyIconSection
                   key={group.category}
+                  cardMin={densityPreset.cardMin}
                   color={deferredColor}
                   group={group}
                   onIconClick={openIconActions}
