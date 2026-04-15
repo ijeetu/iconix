@@ -307,6 +307,7 @@ button {
 .sidebar-list {
   display: grid;
   gap: 6px;
+  margin-top: 10px;
   min-height: 0;
   overflow: auto;
   padding-right: 4px;
