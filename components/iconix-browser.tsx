@@ -100,9 +100,7 @@ export function IconixBrowser() {
   const [style, setStyle] = useState("All");
   const [customColor, setCustomColor] = useState<string>(THEME_DEFAULT_COLORS.dark);
   const [isCustomColorDirty, setIsCustomColorDirty] = useState(false);
-  const [customStrokeWidth, setCustomStrokeWidth] = useState(2);
   const [customSize, setCustomSize] = useState(24);
-  const [absoluteStrokeWidth, setAbsoluteStrokeWidth] = useState(false);
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
   const [isActionOpen, setIsActionOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -320,7 +318,7 @@ export function IconixBrowser() {
   }, [isSearchOpen, query, style]);
 
   const iconSrc = (slug: string) =>
-    `/api/icons/${slug}?color=${encodeURIComponent(resolvedCustomizerColor)}&strokeWidth=${customStrokeWidth}`;
+    `/api/icons/${slug}?color=${encodeURIComponent(resolvedCustomizerColor)}`;
 
   const openIconActions = (icon: IconRecord) => {
     setSelectedSlug(icon.slug);
@@ -362,7 +360,7 @@ export function IconixBrowser() {
     }
 
     const svg = await fetchText(
-      `/api/icons/${selectedIcon.slug}?color=${encodeURIComponent(resolvedCustomizerColor)}&strokeWidth=${customStrokeWidth}`,
+      `/api/icons/${selectedIcon.slug}?color=${encodeURIComponent(resolvedCustomizerColor)}`,
     );
     await copyText("SVG", svg);
   };
@@ -384,7 +382,7 @@ export function IconixBrowser() {
     }
 
     const link = document.createElement("a");
-    link.href = `/api/icons/${selectedIcon.slug}?download=1&color=${encodeURIComponent(resolvedCustomizerColor)}&strokeWidth=${customStrokeWidth}`;
+    link.href = `/api/icons/${selectedIcon.slug}?download=1&color=${encodeURIComponent(resolvedCustomizerColor)}`;
     link.download = `${selectedIcon.slug}.svg`;
     document.body.append(link);
     link.click();
@@ -399,11 +397,7 @@ export function IconixBrowser() {
     const iconProps = [
       `size={${customSize}}`,
       `color="${resolvedCustomizerColor}"`,
-      `strokeWidth={${customStrokeWidth}}`,
-      absoluteStrokeWidth ? `vectorEffect="non-scaling-stroke"` : null,
-    ]
-      .filter(Boolean)
-      .join(" ");
+    ].join(" ");
 
     const snippet = [
       `import { ${selectedIcon.componentName} } from "@/generated/components/${selectedIcon.componentName}";`,
@@ -535,25 +529,6 @@ export function IconixBrowser() {
           </div>
 
           <div className="customizer-field">
-            <label className="customizer-label" htmlFor="icon-stroke-width">
-              Stroke width
-            </label>
-            <div className="customizer-stepper">
-              <input
-                id="icon-stroke-width"
-                aria-label="Icon stroke width"
-                className="customizer-number"
-                min="1"
-                onChange={(event) => setCustomStrokeWidth(Number(event.target.value) || 1)}
-                step="0.5"
-                type="number"
-                value={customStrokeWidth}
-              />
-              <span>px</span>
-            </div>
-          </div>
-
-          <div className="customizer-field">
             <label className="customizer-label" htmlFor="icon-size">
               Size
             </label>
@@ -571,15 +546,6 @@ export function IconixBrowser() {
               <span>px</span>
             </div>
           </div>
-
-          <label className="customizer-toggle">
-            <input
-              checked={absoluteStrokeWidth}
-              onChange={(event) => setAbsoluteStrokeWidth(event.target.checked)}
-              type="checkbox"
-            />
-            <span>Absolute stroke width</span>
-          </label>
         </section>
 
         <section className="sidebar-block sidebar-category-block">
@@ -648,6 +614,7 @@ export function IconixBrowser() {
             {
               "--icon-card-min": `${densityPreset.cardMin}px`,
               "--icon-preview-size": `${previewScale}px`,
+              "--icon-card-preview-h": `${previewScale * 2}px`,
             } as CSSProperties
           }
         >
