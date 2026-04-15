@@ -5,9 +5,9 @@ import { useDeferredValue, useEffect, useRef, useState } from "react";
 import type { IconRecord } from "@/lib/icon-types";
 
 const DENSITY_PRESETS = [
-  { id: "compact", label: "Compact", cardMin: 140, iconSize: 38 },
-  { id: "balanced", label: "Balanced", cardMin: 160, iconSize: 48 },
-  { id: "showcase", label: "Large", cardMin: 188, iconSize: 60 },
+  { id: "compact", label: "Compact", cardMin: 88, iconSize: 24 },
+  { id: "balanced", label: "Balanced", cardMin: 108, iconSize: 32 },
+  { id: "showcase", label: "Large", cardMin: 140, iconSize: 44 },
 ] as const;
 const THEME_STORAGE_KEY = "iconix-theme";
 const THEME_DEFAULT_COLORS = {
@@ -17,6 +17,72 @@ const THEME_DEFAULT_COLORS = {
 
 type DensityPreset = (typeof DENSITY_PRESETS)[number]["id"];
 type ThemeMode = keyof typeof THEME_DEFAULT_COLORS;
+
+function CustomSelect({
+  value,
+  onChange,
+  options,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  ariaLabel?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const selected = options.find((o) => o.value === value);
+
+  useEffect(() => {
+    if (!open) return;
+    const handlePointer = (e: MouseEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const handleKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", handlePointer);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handlePointer);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="custom-select">
+      <button
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-label={ariaLabel}
+        className={`custom-select-trigger${open ? " open" : ""}`}
+        onClick={() => setOpen((v) => !v)}
+        type="button"
+      >
+        <span>{selected?.label ?? value}</span>
+        <svg aria-hidden="true" className="custom-select-icon" fill="none" height="12" stroke="currentColor" strokeWidth="2" viewBox="0 0 12 12" width="12">
+          <path d="M2 4l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <div className="custom-select-list" role="listbox">
+          {options.map((option) => (
+            <button
+              key={option.value}
+              aria-selected={option.value === value}
+              className={`custom-select-option${option.value === value ? " active" : ""}`}
+              onClick={() => { onChange(option.value); setOpen(false); }}
+              role="option"
+              type="button"
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function formatCount(value: number) {
   return new Intl.NumberFormat("en-US").format(value);
@@ -39,6 +105,8 @@ export function IconixBrowser() {
   const [absoluteStrokeWidth, setAbsoluteStrokeWidth] = useState(false);
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
   const [isActionOpen, setIsActionOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [highlightedSearchIndex, setHighlightedSearchIndex] = useState(0);
   const [status, setStatus] = useState<string | null>(null);
   const [density, setDensity] = useState<DensityPreset>("balanced");
   const [previewScale, setPreviewScale] = useState(48);
@@ -102,27 +170,13 @@ export function IconixBrowser() {
   }, [status]);
 
   useEffect(() => {
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") {
-        if (isActionOpen) {
-          setIsActionOpen(false);
-          return;
-        }
-        if (query) {
-          setQuery("");
-          return;
-        }
-      }
-      if (event.key === "/" && !isActionOpen) {
-        const active = document.activeElement;
-        if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) return;
-        event.preventDefault();
-        searchRef.current?.focus();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isActionOpen, query]);
+    if (!isSearchOpen) {
+      return;
+    }
+
+    const frameId = window.requestAnimationFrame(() => searchRef.current?.focus());
+    return () => window.cancelAnimationFrame(frameId);
+  }, [isSearchOpen]);
 
   useEffect(() => {
     setActiveCategoryNav("overview");
@@ -166,6 +220,7 @@ export function IconixBrowser() {
       .toLowerCase()
       .includes(normalizedQuery);
   });
+  const commandResults = normalizedQuery ? filteredIcons.slice(0, 50) : [];
 
   const filteredCategoryCountMap = new Map<string, number>();
   for (const icon of filteredIcons) {
@@ -256,8 +311,22 @@ export function IconixBrowser() {
     };
   }, [groupedIcons, loading]);
 
+  useEffect(() => {
+    if (!isSearchOpen) {
+      return;
+    }
+
+    setHighlightedSearchIndex(0);
+  }, [isSearchOpen, query, style]);
+
   const iconSrc = (slug: string) =>
     `/api/icons/${slug}?color=${encodeURIComponent(resolvedCustomizerColor)}&strokeWidth=${customStrokeWidth}`;
+
+  const openIconActions = (icon: IconRecord) => {
+    setSelectedSlug(icon.slug);
+    setIsSearchOpen(false);
+    setIsActionOpen(true);
+  };
 
   const scrollToCategory = (categoryName: string) => {
     const targetId = categoryName === "overview" ? "icon-explorer-top" : categoryId(categoryName);
@@ -292,7 +361,9 @@ export function IconixBrowser() {
       return;
     }
 
-    const svg = await fetchText(`/api/icons/${selectedIcon.slug}`);
+    const svg = await fetchText(
+      `/api/icons/${selectedIcon.slug}?color=${encodeURIComponent(resolvedCustomizerColor)}&strokeWidth=${customStrokeWidth}`,
+    );
     await copyText("SVG", svg);
   };
 
@@ -313,7 +384,7 @@ export function IconixBrowser() {
     }
 
     const link = document.createElement("a");
-    link.href = `/api/icons/${selectedIcon.slug}?download=1`;
+    link.href = `/api/icons/${selectedIcon.slug}?download=1&color=${encodeURIComponent(resolvedCustomizerColor)}&strokeWidth=${customStrokeWidth}`;
     link.download = `${selectedIcon.slug}.svg`;
     document.body.append(link);
     link.click();
@@ -344,6 +415,77 @@ export function IconixBrowser() {
 
     await copyText("Usage snippet", snippet);
   };
+
+  useEffect(() => {
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setIsSearchOpen(true);
+        return;
+      }
+
+      if (isSearchOpen) {
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          if (commandResults.length > 0) {
+            setHighlightedSearchIndex((current) => (
+              current + 1 >= commandResults.length ? 0 : current + 1
+            ));
+          }
+          return;
+        }
+
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          if (commandResults.length > 0) {
+            setHighlightedSearchIndex((current) => (
+              current - 1 < 0 ? commandResults.length - 1 : current - 1
+            ));
+          }
+          return;
+        }
+
+        if (event.key === "Enter") {
+          const activeResult = commandResults[highlightedSearchIndex];
+
+          if (activeResult) {
+            event.preventDefault();
+            openIconActions(activeResult);
+          }
+          return;
+        }
+      }
+
+      if (event.key === "Escape") {
+        if (isActionOpen) {
+          setIsActionOpen(false);
+          return;
+        }
+        if (isSearchOpen) {
+          setIsSearchOpen(false);
+          return;
+        }
+        if (query) {
+          setQuery("");
+          return;
+        }
+      }
+      if (event.key === "/" && !isActionOpen && !isSearchOpen) {
+        const active = document.activeElement;
+        if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) return;
+        event.preventDefault();
+        setIsSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    commandResults,
+    highlightedSearchIndex,
+    isActionOpen,
+    isSearchOpen,
+    query,
+  ]);
 
   return (
     <main className="dashboard-shell simple-shell">
@@ -510,68 +652,36 @@ export function IconixBrowser() {
           }
         >
           <div className="explorer-toolbar" id="icon-explorer-top">
-            <div className="search-wrapper">
-              <input
-                ref={searchRef}
-                aria-label="Search icons"
-                className="input"
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder='Search icons  ( / to focus )'
-                value={query}
-              />
-              {query && (
-                <button
-                  aria-label="Clear search"
-                  className="search-clear"
-                  onClick={() => setQuery("")}
-                  type="button"
-                >
-                  ×
-                </button>
-              )}
-            </div>
-
-            <div className="select-shell">
-              <select
-                aria-label="Filter by style"
-                className="select"
-                onChange={(event) => setStyle(event.target.value)}
-                value={style}
-              >
-                {styles.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
-                ))}
-              </select>
-              <span aria-hidden="true" className="select-chevron">
-                ˅
+            <button
+              aria-label="Open search"
+              className="search-trigger"
+              onClick={() => setIsSearchOpen(true)}
+              type="button"
+            >
+              <span className={query ? "search-trigger-value" : "search-trigger-placeholder"}>
+                {query || "Search icons"}
               </span>
-            </div>
+              <span className="search-trigger-shortcut">Cmd K</span>
+            </button>
 
-            <div className="select-shell">
-              <select
-                aria-label="Grid density"
-                className="select"
-                onChange={(event) => {
-                  const nextDensity = event.target.value as DensityPreset;
-                  const preset =
-                    DENSITY_PRESETS.find((item) => item.id === nextDensity) ?? DENSITY_PRESETS[1];
-                  setDensity(nextDensity);
-                  setPreviewScale(preset.iconSize);
-                }}
-                value={density}
-              >
-                {DENSITY_PRESETS.map((preset) => (
-                  <option key={preset.id} value={preset.id}>
-                    {preset.label}
-                  </option>
-                ))}
-              </select>
-              <span aria-hidden="true" className="select-chevron">
-                ˅
-              </span>
-            </div>
+            <CustomSelect
+              ariaLabel="Filter by style"
+              onChange={setStyle}
+              options={styles.map((s) => ({ value: s, label: s }))}
+              value={style}
+            />
+
+            <CustomSelect
+              ariaLabel="Grid density"
+              onChange={(val) => {
+                const nextDensity = val as DensityPreset;
+                const preset = DENSITY_PRESETS.find((p) => p.id === nextDensity) ?? DENSITY_PRESETS[1];
+                setDensity(nextDensity);
+                setPreviewScale(preset.iconSize);
+              }}
+              options={DENSITY_PRESETS.map((p) => ({ value: p.id, label: p.label }))}
+              value={density}
+            />
           </div>
 
           {loading ? (
@@ -604,10 +714,7 @@ export function IconixBrowser() {
                       <button
                         key={icon.slug}
                         className={`icon-card ${icon.slug === selectedIcon?.slug ? "active" : ""}`}
-                        onClick={() => {
-                          setSelectedSlug(icon.slug);
-                          setIsActionOpen(true);
-                        }}
+                        onClick={() => openIconActions(icon)}
                         type="button"
                       >
                         <div className="icon-card-preview">
@@ -677,6 +784,74 @@ export function IconixBrowser() {
                 Copy Usage Snippet
               </button>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isSearchOpen ? (
+        <div
+          className="action-sheet-backdrop search-modal-backdrop"
+          onClick={() => setIsSearchOpen(false)}
+          role="presentation"
+        >
+          <div
+            className="action-sheet search-modal"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="search-modal-head">
+              <input
+                ref={searchRef}
+                aria-label="Search icons"
+                className="input search-modal-input"
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search icons"
+                value={query}
+              />
+              <button
+                className="button-ghost action-sheet-close"
+                onClick={() => setIsSearchOpen(false)}
+                type="button"
+              >
+                Close
+              </button>
+            </div>
+            <div className="search-modal-meta">
+              <span>{formatCount(filteredIcons.length)} results</span>
+              <span>{style}</span>
+            </div>
+            {!normalizedQuery ? (
+              <div className="search-modal-empty">
+                <p>Type to search icons&hellip;</p>
+              </div>
+            ) : commandResults.length === 0 ? (
+              <div className="search-modal-empty">
+                <p>No results for &ldquo;{query}&rdquo;</p>
+              </div>
+            ) : (
+              <div className="search-modal-results" role="listbox" aria-label="Search results">
+                {commandResults.map((icon, index) => (
+                  <button
+                    key={icon.slug}
+                    aria-selected={highlightedSearchIndex === index}
+                    className={`search-result-item${highlightedSearchIndex === index ? " active" : ""}`}
+                    onClick={() => openIconActions(icon)}
+                    onMouseEnter={() => setHighlightedSearchIndex(index)}
+                    role="option"
+                    type="button"
+                  >
+                    <span className="search-result-preview">
+                      <img alt={icon.label} loading="lazy" src={iconSrc(icon.slug)} />
+                    </span>
+                    <span className="search-result-copy">
+                      <span className="search-result-name">{icon.label}</span>
+                      <span className="search-result-meta">{icon.category} · {icon.style}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       ) : null}
