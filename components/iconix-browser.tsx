@@ -5,9 +5,9 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import type { SlimIconRecord } from "@/lib/icon-types";
 
 const DENSITY_PRESETS = [
-  { id: "compact",  label: "Compact",  cardMin:  76, iconSize: 24, nameFontSize: "0.74rem", metaFontSize: "0.62rem" },
-  { id: "balanced", label: "Balanced", cardMin:  96, iconSize: 32, nameFontSize: "0.82rem", metaFontSize: "0.68rem" },
-  { id: "showcase", label: "Large",    cardMin: 128, iconSize: 44, nameFontSize: "0.82rem", metaFontSize: "0.68rem" },
+  { id: "compact",  label: "Compact",  cardMin:  58, iconSize: 24, nameFontSize: "0.74rem", metaFontSize: "0.62rem" },
+  { id: "balanced", label: "Balanced", cardMin:  72, iconSize: 32, nameFontSize: "0.82rem", metaFontSize: "0.68rem" },
+  { id: "showcase", label: "Large",    cardMin: 100, iconSize: 44, nameFontSize: "0.82rem", metaFontSize: "0.68rem" },
 ] as const;
 const THEME_STORAGE_KEY = "iconix-theme";
 const THEME_DEFAULT_COLORS = {
