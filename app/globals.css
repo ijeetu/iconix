@@ -697,14 +697,14 @@ button {
   aspect-ratio: 1;
   border: 1px solid transparent;
   border-radius: var(--radius-lg);
-  background: transparent;
+  background: var(--surface);
   padding: 0;
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 .icon-card:hover {
   border-color: var(--line);
-  background: var(--surface);
+  background: var(--surface-strong);
 }
 
 .icon-card.active {
