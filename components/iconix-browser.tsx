@@ -188,6 +188,7 @@ export function IconixBrowser({ initialIcons }: { initialIcons: SlimIconRecord[]
   const [customSize, setCustomSize] = useState(24);
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
   const [isActionOpen, setIsActionOpen] = useState(false);
+  const [codePreview, setCodePreview] = useState<{ label: string; content: string } | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [highlightedSearchIndex, setHighlightedSearchIndex] = useState(0);
   const [status, setStatus] = useState<string | null>(null);
@@ -380,6 +381,7 @@ export function IconixBrowser({ initialIcons }: { initialIcons: SlimIconRecord[]
     setSelectedSlug(icon.slug);
     setIsSearchOpen(false);
     setIsActionOpen(true);
+    setCodePreview(null);
   };
 
   const scrollToCategory = (categoryName: string) => {
@@ -409,12 +411,14 @@ export function IconixBrowser({ initialIcons }: { initialIcons: SlimIconRecord[]
       `/api/icons/${selectedIcon.slug}?color=${encodeURIComponent(resolvedCustomizerColor)}`,
     );
     await copyText("SVG", svg);
+    setCodePreview({ label: "SVG", content: svg });
   };
 
   const copyComponent = async () => {
     if (!selectedIcon) return;
     const component = await fetchText(`/api/icons/${selectedIcon.slug}?format=component`);
     await copyText("React component", component);
+    setCodePreview({ label: "React Component", content: component });
   };
 
   const downloadSvg = () => {
@@ -438,6 +442,7 @@ export function IconixBrowser({ initialIcons }: { initialIcons: SlimIconRecord[]
       `}`,
     ].join("\n");
     await copyText("Usage snippet", snippet);
+    setCodePreview({ label: "Usage Snippet", content: snippet });
   };
 
   // ── Keyboard shortcuts ──────────────────────────────────────────────────────
@@ -715,6 +720,42 @@ export function IconixBrowser({ initialIcons }: { initialIcons: SlimIconRecord[]
               <button className="button-ghost" onClick={copyComponent} type="button">Copy React Component</button>
               <button className="button-ghost" onClick={copyUsageSnippet} type="button">Copy Usage Snippet</button>
             </div>
+
+            {codePreview && (
+              <div className="code-preview">
+                <div className="code-preview-head">
+                  <span className="code-preview-label">{codePreview.label}</span>
+                  <div className="code-preview-actions">
+                    <button
+                      className="code-preview-copy-btn"
+                      onClick={async () => {
+                        await navigator.clipboard.writeText(codePreview.content);
+                        setStatus("Copied again");
+                      }}
+                      title="Copy again"
+                      type="button"
+                    >
+                      <svg fill="none" height="13" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" width="13">
+                        <rect height="13" rx="2" ry="2" width="13" x="9" y="9" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                      Copy
+                    </button>
+                    <button
+                      aria-label="Dismiss code preview"
+                      className="code-preview-dismiss"
+                      onClick={() => setCodePreview(null)}
+                      type="button"
+                    >
+                      <svg fill="none" height="12" stroke="currentColor" strokeLinecap="round" strokeWidth="2.5" viewBox="0 0 12 12" width="12">
+                        <path d="M1 1l10 10M11 1L1 11" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                <pre className="code-preview-block"><code>{codePreview.content}</code></pre>
+              </div>
+            )}
           </div>
         </div>
       ) : null}
